@@ -1,7 +1,6 @@
 // Pantallas y piezas de interfaz: barras de monedas, HUD de la temporada, resumen, avisos y ventanas.
 
 import { CURRENCIES } from './data.js';
-import { lvl } from './game.js';
 import { PAL, iconURL, resURL } from './pixel.js';
 import { fmt } from './format.js';
 
@@ -19,14 +18,8 @@ export function setText(e, t) {
 }
 
 /** Monedas que ya conoces (las demás no se enseñan hasta que existen). */
-export function knownCurrencies(s) {
-  const out = ['n'];
-  if (lvl(s, 'minerales') || s.res.m > 0) out.push('m');
-  if (lvl(s, 'arboles') || s.res.a > 0) out.push('a');
-  if (lvl(s, 'setas') || s.res.e > 0) out.push('e');
-  if (lvl(s, 'pantano') || s.res.t > 0) out.push('t');
-  if (lvl(s, 'cueva') || s.res.c > 0) out.push('c');
-  return out;
+export function knownCurrencies() {
+  return ['f'];
 }
 
 /** Pinta (o actualiza) una barra de monedas. values: { n: 12, ... } */
@@ -54,7 +47,7 @@ export function renderRes(bar, list, values, rates = null) {
 }
 
 export function iconButton(btn, name) {
-  btn.innerHTML = `<img alt="" src="${iconURL(name, PAL.cream, PAL.hyphaHi)}">`;
+  btn.innerHTML = `<img alt="" src="${iconURL(name, PAL.cream, PAL.creamHi)}">`;
 }
 
 // ── Avisos y ventanas ──────────────────────────────────────────────────────
@@ -167,7 +160,7 @@ async function importDialog(G) {
 async function resetDialog(G) {
   const r = await modal({
     title: '¿Borrar la partida?',
-    body: '<p>Se pierde todo y empiezas desde la espora. No se puede deshacer.</p>',
+    body: '<p>Se pierde todo y empiezas desde la semilla. No se puede deshacer.</p>',
     actions: [{ id: 'cancel', label: 'Cancelar', primary: true }, { id: 'reset', label: 'Borrar todo' }],
   });
   if (r === 'reset') G.hardReset();

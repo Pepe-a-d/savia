@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Micelio</title>
-    <meta name="description" content="Un incremental de hongos en pixel art: guía tu micelio, absorbe y hazlo crecer temporada tras temporada." />
+    <title>Savia</title>
+    <meta name="description" content="Un incremental de árboles en pixel art: guía sus raíces, hazlos crecer y atrapa sus frutos temporada tras temporada." />
     <meta name="theme-color" content="#140F1C" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -15,20 +15,16 @@
     <div id="app">
       <section id="screen-tree" class="screen">
         <header class="topbar">
-          <div class="brand">MICELIO</div>
+          <div class="brand">SAVIA <small id="gen"></small></div>
           <div class="res-bar" id="tree-res"></div>
           <button type="button" class="px-icon" id="gear" aria-label="Ajustes"></button>
         </header>
         <div id="tree" class="tree"></div>
         <footer class="tree-foot">
           <p class="last" id="last"></p>
-          <div class="biome-pick" id="biome-pick" role="group" aria-label="Dónde pasar la temporada" hidden>
-            <button type="button" data-b="bosque">Bosque</button>
-            <button type="button" data-b="pantano">Pantano</button>
-            <button type="button" data-b="cueva" hidden>Cueva</button>
-          </div>
+          <div class="zone-pick" id="zone-pick" role="group" aria-label="Dónde pasar la temporada" hidden></div>
           <button type="button" class="px-btn big" id="start"></button>
-          <button type="button" class="px-icon" id="center" aria-label="Centrar el árbol"></button>
+          <button type="button" class="px-icon" id="center" aria-label="Centrar las mejoras"></button>
         </footer>
       </section>
 
@@ -38,11 +34,15 @@
           <div class="run-top">
             <span class="run-season" id="run-season"></span>
             <div class="res-bar" id="run-res"></div>
-            <span class="run-time" id="run-time"></span>
+            <span class="run-growth" id="run-growth" title="Crecimiento del árbol"></span>
           </div>
-          <div class="timer"><i id="timer-fill"></i></div>
-          <div class="run-depth" id="run-depth"></div>
+          <div class="sprouts" id="sprouts"><span>Brotes</span><div class="sbar"><i id="sprout-fill"></i></div></div>
+          <div class="catch" id="catch" hidden></div>
         </header>
+        <div class="depth-bar" id="depth-bar" hidden>
+          <div class="db-track" id="db-track"><i class="db-fill" id="db-fill"></i><b class="db-rec" id="db-rec" hidden></b></div>
+          <div class="db-label" id="db-label"></div>
+        </div>
         <p class="run-hint" id="run-hint" hidden></p>
         <div class="summary px-panel" id="summary" hidden></div>
       </section>

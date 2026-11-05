@@ -1,51 +1,67 @@
-// Dibuja una temporada en pixel art, vista en corte: cielo, superficie y capas de suelo sin fondo.
-// Todo va a un lienzo pequeño (1 px = 1 px del mundo) que se amplía a pantalla sin suavizado.
-// La cámara baja con la red y, al acabar la temporada, sube a la superficie para ver las setas.
-// El fondo y la red se guardan por trozos de suelo (CH px de alto); la red se dibuja solo donde crece.
+// Dibuja una temporada en pixel art, vista en corte: cielo alto para los árboles, superficie
+// y capas de suelo sin fondo. Todo va a un lienzo pequeño (1 px = 1 px del mundo) que se amplía
+// a pantalla sin suavizado. La cámara sigue a las raíces que crecen y, al acabar, sube para ver
+// crecer los árboles y caer sus frutos. Fondo y raíces se guardan por trozos de suelo (CH px de alto).
 
 import { PAL, bitmap } from './pixel.js';
-import { mulberry32, CELL, CH, bucket } from './run.js';
+import { mulberry32, CH, bucket, treeShape, GROW_T, crackX } from './run.js';
 import { LAYERS } from './data.js';
 
+// Aspecto de cada zona. layers: una por capa del suelo, [base, clara, oscura]
 const THEMES = {
-  bosque: {
-    sky: ['#120D22', '#1A1430', '#251A3D', '#3A2350', '#5A2E5E'],
-    hills: ['#1E1534', '#17112A'],
-    stars: true,
-    surface: 'grass',
-    // Tierra, Arcilla, Roca, Roca madre, Profundidades: [base, clara, oscura]
+  pradera: {
+    sky: ['#120D22', '#1A1430', '#251A3D', '#3A2350', '#5A2E5E', '#7A3E5E'],
+    hills: ['#2B1D42', '#1E1534'],
     layers: [['#3B2731', '#4A3340', '#2E1F28'], ['#46282A', '#573434', '#361E20'], ['#2C1F36', '#3A2A45', '#22182B'], ['#211830', '#2C2040', '#191226'], ['#160F22', '#1F1730', '#0F0A18']],
     speck: ['#5A4652', '#7A6472'],
-    roots: '#4E3524',
     fossil: '#3E3050',
-    hypha: ['#F4D58D', '#6E5536', '#FFF8E4'],
+    moon: ['#3A2350', '#F4E2B0', '#CDB57E'],
+    grass: ['#3E7A3A', '#5FA14A', '#8FD06A'],
+    mote: '#4A3448',
   },
-  pantano: {
-    sky: ['#0A1418', '#0F1D21', '#16292B', '#1F3836', '#2C4A42'],
-    hills: ['#12252A', '#0E1C20'],
-    stars: false,
-    surface: 'water',
-    // Barro, Barro inundado, Cieno, Turba antigua, Abismo
-    layers: [['#2F2A21', '#3B3428', '#25211A'], ['#1D2C30', '#26393C', '#17242A'], ['#182628', '#203234', '#121D1F'], ['#221C16', '#2E261D', '#18130F'], ['#0D1416', '#141D20', '#090E10']],
-    speck: ['#3E4A44', '#5A6A60'],
-    roots: '#3A3428',
+  ribera: {
+    sky: ['#0C1A22', '#11242C', '#183238', '#21433F', '#2E5A4A', '#3E6A50'],
+    hills: ['#1E4440', '#14302E'],
+    layers: [['#2F2A24', '#3B3428', '#25211A'], ['#1D3A48', '#27505E', '#173040'], ['#34343C', '#44444E', '#28282E'], ['#24304A', '#2E3C5A', '#1C2638'], ['#141A26', '#1C2432', '#0E121A']],
+    speck: ['#4A4438', '#5E5648'],
     fossil: '#2F4044',
-    hypha: ['#E9DCA0', '#4E5A3C', '#FFF8E4'],
+    moon: ['#21433F', '#D8E8C8', '#A8C0A0'],
+    grass: ['#3E7A3A', '#4E8A3E', '#7DB85A'],
+    mote: '#3A4A44',
+    reeds: true,
   },
-  cueva: {
-    sky: ['#06050B', '#0B0A13', '#110F1B', '#181624', '#211E2E'],
-    hills: [],
-    stars: false,
-    surface: 'ceiling',
-    // Caliza, Pizarra, Basalto, Geoda, Abismo
-    layers: [['#25223A', '#302C48', '#1C1A2C'], ['#1D1B2D', '#27243A', '#161424'], ['#17151F', '#1F1C2B', '#110F18'], ['#1E1530', '#2A1D42', '#150F22'], ['#0B0A10', '#121019', '#07060B']],
-    speck: ['#34304A', '#4A4560'],
-    roots: '#2A2638',
-    fossil: '#2C2840',
-    hypha: ['#ECE0C4', '#4A4258', '#FFF8E4'],
+  ladera: {
+    sky: ['#1A1028', '#2A1530', '#4A2236', '#7A3A3A', '#A8583A', '#C87A4A'],
+    hills: ['#5A3040', '#3A2034'],
+    layers: [['#4A3640', '#5E4652', '#3A2A32'], ['#3E3A44', '#4E4A56', '#2E2A34'], ['#46404A', '#58505E', '#342E38'], ['#3A3448', '#4C4560', '#2C2638'], ['#2A2430', '#36303E', '#1E1A24']],
+    speck: ['#5A5462', '#706A78'],
+    fossil: '#4A4456',
+    moon: ['#7A3A3A', '#FFE2B0', '#E0B880'],
+    grass: ['#4E6A34', '#6E8A3A', '#9AB060'],
+    mote: '#55505E',
+    peaks: true,
+    crack: ['#1A1218', '#2A2026', '#6E6878'],
+  },
+  viejo: {
+    sky: ['#08100E', '#0C1814', '#10201A', '#162A20', '#1E3626', '#2A4430'],
+    hills: ['#13261C', '#0E1C15'],
+    layers: [['#1E1A16', '#2A2420', '#141210'], ['#241C16', '#30261E', '#1A1410'], ['#16120E', '#201A14', '#0E0C0A'], ['#22242A', '#2E3038', '#181A1E'], ['#0E0C10', '#16141A', '#08070A']],
+    speck: ['#3A3228', '#4E4436'],
+    fossil: '#3A3A30',
+    moon: ['#162A20', '#E8F0D0', '#B8C8A0'],
+    grass: ['#2E5A2A', '#3E7A3A', '#6EA85A'],
+    mote: '#3A3428',
+    giants: true,
+    dead: ['#4E4A44', '#6A645C', '#2E2A26'],
   },
 };
-const BIOLUM = ['#C6F26B', '#3E6A2A', '#F0FFC0'];
+const ROOT = {
+  live: '#F0CF92', liveLo: '#5A3B28', liveHi: '#FFF8E4',
+  old: '#8A5A38', oldHi: '#B07A4E', oldLo: '#3A2216',
+};
+const LEAF = ['#1F4A2A', '#2E6A3A', '#3E8A4A', '#5FA155', '#8FD06A'];
+const BARK = ['#4A2E20', '#6A4630', '#8E6240'];
+const GROWTH_COL = '#9BE36B';
 
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
 const bayer = (x, y) => BAYER[(y & 3) * 4 + (x & 3)];
@@ -53,23 +69,10 @@ const bayer = (x, y) => BAYER[(y & 3) * 4 + (x & 3)];
 const SPR = {
   n: ['.###.', '#o##o', '##o##', '#####', '.###.'],
   big: ['..###..', '.#####.', '##o####', '#o##o##', '#######', '.#####.', '..###..'],
-  leaf: ['....###', '..####o', '.###o##', '.##o###', '.#o###.', '#o###..', '.##....'],
-  m: ['..#..', '.#o#.', '#o###', '.###.', '..#..'],
-  core: ['..###..', '.#ooo#.', '#ooooo#', '#oo#oo#', '#ooooo#', '.#ooo#.', '..###..'],
-  seta: ['.###.', '#o#o#', '#####', '..s..', '..s..'],
   fossil: ['.###.', '#...#', '#.#.#', '#..#.', '.##..'],
   bone: ['#....#', '.####.', '#....#'],
-  guano: ['..###..', '.#o###.', '#######', '#o##o##'],
-  c: ['...#...', '..#o#..', '#.#o#.#', '#o#o#o#', '#o###o#', '.#####.', '..###..'],
-  bat: ['#.....#', '##.#.##', '.#####.', '..#.#..'],
-};
-const POCKET_COL = {
-  n: [PAL.n, '#FFC27A'],
-  big: [PAL.big, '#FFE7B8'],
-  leaf: [PAL.leaf, '#D2F7C8'],
-  m: [PAL.m, '#E2FBFF'],
-  guano: ['#D9C9A0', '#FFF3D6'],
-  c: ['#C79BFF', '#F4E6FF'],
+  fruit: ['.##.', '#o##', '####', '.##.'],
+  vein: ['..#..', '.#o#.', '#o#o#', '.###.', '..#..'],
 };
 
 function makeCanvas(w, h) {
@@ -79,15 +82,17 @@ function makeCanvas(w, h) {
   return c;
 }
 
-function line(g, x0, y0, x1, y1) {
+/** Línea de píxeles; con w > 1, de w×w píxeles de grueso. */
+function line(g, x0, y0, x1, y1, w = 1) {
   x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
+  const o = w > 1 ? Math.floor(w / 2) : 0;
   const dx = Math.abs(x1 - x0);
   const dy = -Math.abs(y1 - y0);
   const sx = x0 < x1 ? 1 : -1;
   const sy = y0 < y1 ? 1 : -1;
   let err = dx + dy;
   for (;;) {
-    g.fillRect(x0, y0, 1, 1);
+    g.fillRect(x0 - o, y0 - o, w, w);
     if (x0 === x1 && y0 === y1) break;
     const e2 = 2 * err;
     if (e2 >= dy) { err += dy; x0 += sx; }
@@ -114,6 +119,7 @@ function rgb(hex) {
   return v;
 }
 
+const ease = (p) => 1 - (1 - p) ** 3;
 
 export class RunRenderer {
   constructor(canvas) {
@@ -140,38 +146,41 @@ export class RunRenderer {
     return { W: Math.ceil(w / S), H: Math.ceil(h / S) };
   }
 
-  /** opts.record: récord de profundidad (px) en este lugar, para marcarlo en el suelo. */
+  /** opts.record: récord de profundidad (px) en esta zona, para marcarlo en el suelo. */
   setRun(run, seed, opts = {}) {
     this.run = run;
     this.seed = seed;
-    this.biome = run.cave ? 'cueva' : run.swamp ? 'pantano' : 'bosque';
-    this.theme = THEMES[this.biome];
-    this.bounds = LAYERS[this.biome].map(([d]) => run.soilTop + d);
+    this.zone = run.st.zone || 'pradera';
+    this.theme = THEMES[this.zone] || THEMES.pradera;
+    this.bounds = LAYERS[this.zone].map(([d]) => run.soilTop + d);
     this.record = opts.record || 0;
-    this.dripSrc = [];
-    this.darkC = null;
-    this.hyphaCol = run.st.biolum ? BIOLUM : this.theme.hypha;
     this.buf = makeCanvas(run.W, run.VH);
     this.g = this.buf.getContext('2d');
     this.bgC = []; // fondo por trozo
-    this.netC = []; // red por trozo: {c, g}
-    this.sprites = new WeakMap();
+    this.netC = []; // raíces por trozo: {c, g}
     this.fx = [];
     this.floaters = [];
     this.recent = [];
     this.banner = null;
-    this.endT = 0;
-    this.cam = 0;
-    this.camY = 0;
-    this.camTarget = 0;
-    this.chunkBg(0);
-    this.plantSprites = run.plants.map((p) => this.makePlant(p));
-    this.logSprites = run.logs.map((l) => this.makeLog(l));
+    this.camY = run.startCam;
+    this.camTarget = run.startCam;
+    this.cam = Math.round(this.camY);
+    // forma de la copa de cada árbol: manchas de hojas al azar, siempre las mismas
+    this.crowns = run.trees.map((t) => {
+      const rng = mulberry32((seed ^ Math.imul(t.i + 3, 0x45d9f3b)) >>> 0);
+      const blobs = [[0, 0, 1]];
+      const n = 5 + Math.floor(rng() * 3);
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + rng() * 0.6;
+        blobs.push([Math.cos(a) * (0.5 + rng() * 0.15), Math.sin(a) * (0.4 + rng() * 0.15) - 0.05, 0.55 + rng() * 0.2]);
+      }
+      return blobs;
+    });
     this.makeAmbient();
     this.resize();
   }
 
-  /** Cartel grande al entrar en una capa nueva. */
+  /** Cartel grande (capa nueva, récord). */
   showBanner(title, sub) {
     this.banner = { title, sub, life: 2.4 };
   }
@@ -185,7 +194,6 @@ export class RunRenderer {
 
   paintChunk(k) {
     const run = this.run;
-    const T = this.theme;
     const { W, skyH, soilTop } = run;
     const y0 = k * CH;
     const c = makeCanvas(W, CH);
@@ -201,12 +209,13 @@ export class RunRenderer {
       d[i] = r; d[i + 1] = gg; d[i + 2] = b; d[i + 3] = 255;
     };
 
-    // Cielo con bandas difuminadas (solo el primer trozo)
+    // Cielo con bandas difuminadas: noche arriba, el último resplandor del día abajo
+    const T = this.theme;
     const sky = T.sky;
-    for (let y = y0; y < Math.min(skyH, y0 + CH); y++) {
+    for (let y = y0; y < Math.min(soilTop, y0 + CH); y++) {
       const t = (y / Math.max(1, skyH - 1)) * (sky.length - 1);
       const i = Math.min(sky.length - 2, Math.floor(t));
-      const fr = t - i;
+      const fr = Math.min(1, t - i);
       for (let x = 0; x < W; x++) put(x, y, fr > bayer(x, y) ? sky[i + 1] : sky[i]);
     }
 
@@ -231,7 +240,8 @@ export class RunRenderer {
     g.putImageData(img, 0, 0);
     g.translate(0, -y0);
 
-    if (k === 0) this.paintSurface(g, rng);
+    // Lo de la superficie se pinta en cada trozo que la toca, siempre con el mismo azar
+    if (y0 < soilTop + 8) this.paintSurface(g, mulberry32((this.seed ^ 0x5eed) >>> 0));
 
     // Piedrecitas (más en las capas de roca) y algún fósil
     const ya = Math.max(soilTop + 4, y0);
@@ -246,13 +256,72 @@ export class RunRenderer {
         g.fillStyle = T.speck[1];
         g.fillRect(x, y, 1, 1);
       }
-      if (k > 0 && rng() < 0.45) {
+      if (y0 > soilTop + 60 && rng() < 0.45) {
         const spr = bitmap(rng() < 0.5 ? SPR.fossil : SPR.bone, T.fossil, '#000');
-        g.drawImage(spr, Math.floor(rng() * (W - 8)), Math.floor(y0 + rng() * (CH - 6)));
+        g.drawImage(spr, Math.floor(rng() * (W - 8)), Math.floor(ya + rng() * Math.max(1, rows - 6)));
       }
     }
 
-    // Piedras, picos de roca y bolsas de agua (también las de los trozos vecinos que asoman)
+    // Ribera: la superficie del agua subterránea
+    const st = run.st;
+    if (st.waterBottom) {
+      const wy = soilTop + st.waterTop;
+      if (wy >= y0 && wy < y0 + CH) {
+        for (let x = 0; x < W; x++) {
+          g.fillStyle = (x + Math.floor(x / 7)) % 5 ? '#3E7A90' : '#5FA8C0';
+          g.fillRect(x, wy + (Math.sin(x * 0.2) > 0.6 ? 1 : 0), 1, 1);
+        }
+      }
+    }
+    // Ladera: grietas en la roca (oscuras, con el borde iluminado) y sus ramales
+    if (st.rockTop) {
+      const T2 = this.theme.crack;
+      const ry = Math.max(soilTop + st.rockTop, y0);
+      for (let y = ry; y < y0 + CH; y++) {
+        for (const c of run.cracks) {
+          const cx = crackX(c, y);
+          const a = Math.round(cx - c.w / 2);
+          const b = Math.round(cx + c.w / 2);
+          g.fillStyle = T2[0];
+          g.fillRect(a, y, b - a + 1, 1);
+          g.fillStyle = T2[1];
+          if ((y * 7 + a) % 5 === 0) g.fillRect(a + 1, y, 1, 1);
+          g.fillStyle = T2[2];
+          g.fillRect(a - 1, y, 1, 1);
+        }
+      }
+      for (let kk = k - 1; kk <= k + 1; kk++) {
+        for (const sp of bucket(run, kk).spurs) {
+          g.fillStyle = T2[2];
+          line(g, sp.x0 - 1, sp.y0 - 1, sp.x1 - 1, sp.y1 - 1, sp.w);
+          g.fillStyle = T2[0];
+          line(g, sp.x0, sp.y0, sp.x1, sp.y1, sp.w);
+        }
+      }
+      // la capa fina de tierra encima de la roca
+      const ty = soilTop + st.rockTop;
+      if (ty >= y0 && ty < y0 + CH) {
+        g.fillStyle = T2[2];
+        for (let x = 0; x < W; x++) if (x % 3) g.fillRect(x, ty, 1, 1);
+      }
+    }
+
+    // Bosque viejo: raíces muertas (grises); al absorberlas se pintan encima, en la capa de raíces
+    if (this.theme.dead) {
+      const D = this.theme.dead;
+      for (let kk = k - 1; kk <= k + 1; kk++) {
+        for (const d of bucket(run, kk).dead) {
+          g.fillStyle = D[2];
+          line(g, d.x0 + 1, d.y0 + 1, d.x1 + 1, d.y1 + 1, 2);
+          g.fillStyle = D[0];
+          line(g, d.x0, d.y0, d.x1, d.y1, 2);
+          g.fillStyle = D[1];
+          line(g, d.x0, d.y0, d.x1, d.y1);
+        }
+      }
+    }
+
+    // Piedras y charcos (también los de los trozos vecinos que asoman)
     for (let kk = k - 1; kk <= k + 1; kk++) {
       const b = bucket(run, kk);
       for (const s of b.stones) this.paintStone(g, s);
@@ -268,125 +337,115 @@ export class RunRenderer {
     return c;
   }
 
-  /** Estrellas, luna, colinas y la superficie (hierba, agua o techo de la cueva). */
+  /** Estrellas, luna, colinas (o montañas) con árboles lejanos y la hierba de la superficie. */
   paintSurface(g, rng) {
     const run = this.run;
     const T = this.theme;
-    const { W, skyH, soilTop } = run;
-    if (T.stars) {
-      for (let k = 0; k < W / 5; k++) {
-        const x = Math.floor(rng() * W);
-        const y = Math.floor(rng() * skyH * 0.7);
-        g.fillStyle = rng() < 0.3 ? '#F4E9D8' : '#7A6A9A';
-        g.fillRect(x, y, 1, 1);
-      }
+    const { W, skyH } = run;
+    for (let k = 0; k < W / 4; k++) {
+      const x = Math.floor(rng() * W);
+      const y = Math.floor(rng() * skyH * 0.6);
+      g.fillStyle = rng() < 0.3 ? '#F4E9D8' : '#7A6A9A';
+      g.fillRect(x, y, 1, 1);
     }
-    if (!run.cave) {
-      const mr = Math.max(3, Math.round(skyH * 0.15));
-      const mx = Math.round(W * 0.8);
-      const my = Math.round(skyH * 0.38);
-      g.fillStyle = run.swamp ? '#2C4A42' : '#3A2350';
-      disc(g, mx, my, mr + 2);
-      g.fillStyle = run.swamp ? '#D8E8C8' : '#F4E2B0';
-      disc(g, mx, my, mr);
-      g.fillStyle = run.swamp ? '#A8C0A0' : '#CDB57E';
-      g.fillRect(mx - 1, my - 1, 2, 1);
-      g.fillRect(mx + 1, my + 1, 1, 1);
+    const mr = 5;
+    const mx = Math.round(W * 0.84);
+    const my = Math.round(skyH * 0.45);
+    g.fillStyle = T.moon[0];
+    disc(g, mx, my, mr + 2);
+    g.fillStyle = T.moon[1];
+    disc(g, mx, my, mr);
+    g.fillStyle = T.moon[2];
+    g.fillRect(mx - 1, my - 1, 2, 1);
+    g.fillRect(mx + 2, my + 1, 1, 1);
+    if (T.giants) {
+      // troncos de árboles gigantes que se pierden hacia arriba
+      for (let x = Math.floor(rng() * 30); x < W; x += 34 + Math.floor(rng() * 40)) {
+        const w = 8 + Math.floor(rng() * 8);
+        g.fillStyle = '#0B1611';
+        g.fillRect(x, 0, w, skyH);
+        g.fillStyle = '#122219';
+        g.fillRect(x, 0, 2, skyH);
+        g.fillRect(x - 3, skyH - 4, w + 6, 4);
+        g.fillStyle = '#0B1611';
+        const by = Math.floor(rng() * skyH * 0.5);
+        line(g, x + w / 2, by, x + w / 2 + (rng() < 0.5 ? -1 : 1) * 18, by - 14, 3);
+      }
     }
     for (let layer = 0; layer < T.hills.length; layer++) {
       g.fillStyle = T.hills[layer];
-      const amp = skyH * (layer ? 0.18 : 0.32);
       const ph = rng() * 10;
+      const tops = [];
       for (let x = 0; x < W; x++) {
-        const h = Math.round(amp * (0.55 + 0.45 * Math.sin(x * (layer ? 0.06 : 0.03) + ph)) + Math.sin(x * 0.17 + ph) * 1.2);
-        g.fillRect(x, skyH - h, 1, h);
-      }
-    }
-    if (run.swamp) {
-      // árboles muertos en el horizonte
-      g.fillStyle = '#0B171A';
-      for (let k = 0; k < Math.round(W / 40); k++) {
-        const x = Math.round(rng() * W);
-        const h = Math.round(skyH * (0.35 + rng() * 0.3));
-        g.fillRect(x, skyH - h, 1, h);
-        g.fillRect(x - 2, skyH - h + 3, 2, 1);
-        g.fillRect(x + 1, skyH - h + 5, 2, 1);
-      }
-    }
-
-    if (T.surface === 'grass') {
-      g.fillStyle = '#3E7A3A';
-      g.fillRect(0, skyH, W, 2);
-      g.fillStyle = '#5FA14A';
-      g.fillRect(0, skyH, W, 1);
-      for (let x = 0; x < W; x++) {
-        const h = rng() < 0.5 ? Math.floor(rng() * 3) : 0;
-        if (!h) continue;
-        g.fillStyle = rng() < 0.5 ? '#5FA14A' : '#8FD06A';
-        g.fillRect(x, skyH - h, 1, h);
-        if (h === 2 && rng() < 0.12) { g.fillStyle = rng() < 0.5 ? '#F49AC2' : '#FFD23F'; g.fillRect(x, skyH - h - 1, 1, 1); }
-      }
-    } else if (T.surface === 'ceiling') {
-      // Cueva: estalactitas colgando del techo y el suelo de roca de la cueva
-      for (let k = 0; k < W / 8; k++) {
-        const x = Math.floor(rng() * W);
-        const len = 3 + Math.floor(rng() * skyH * 0.55);
-        const w0 = 1 + Math.floor(rng() * 2);
-        for (let y = 0; y < len; y++) {
-          const w = Math.max(1, Math.round(w0 * 2 * (1 - y / len)));
-          g.fillStyle = y === len - 1 ? '#4A4566' : y % 4 === 0 ? '#2E2A40' : '#262234';
-          g.fillRect(x - Math.floor(w / 2), y, w, 1);
+        let h;
+        if (T.peaks) {
+          // montañas con picos: dientes de sierra suavizados
+          const f = layer ? 0.045 : 0.022;
+          const tri = Math.abs(((x * f + ph) % 2) - 1);
+          h = Math.round((layer ? 16 : 40) * (0.35 + 0.65 * tri) + Math.sin(x * 0.3 + ph) * 1.5);
+        } else {
+          const amp = layer ? 10 : 22;
+          h = Math.round(amp * (0.55 + 0.45 * Math.sin(x * (layer ? 0.06 : 0.025) + ph)) + Math.sin(x * 0.17 + ph) * 1.2);
         }
-        if (rng() < 0.5) this.dripSrc.push({ x, y: len });
+        g.fillRect(x, skyH - h, 1, h);
+        tops.push(skyH - h);
       }
-      g.fillStyle = '#2E2A3C';
-      g.fillRect(0, skyH, W, 2);
-      g.fillStyle = '#45405A';
-      for (let x = 0; x < W; x++) {
-        if (rng() < 0.5) g.fillRect(x, skyH, 1, 1);
-        if (rng() < 0.08) { g.fillStyle = '#3A3550'; g.fillRect(x, skyH - 1, 2 + Math.floor(rng() * 2), 1); g.fillStyle = '#45405A'; }
+      if (T.peaks && !layer) {
+        // nieve en lo más alto
+        g.fillStyle = '#E8D8E0';
+        for (let x = 0; x < W; x++) if (skyH - tops[x] > 36) g.fillRect(x, tops[x], 1, 2);
+        continue;
       }
-    } else {
-      g.fillStyle = '#1C3B44';
-      g.fillRect(0, skyH - 1, W, 3);
-      g.fillStyle = '#3E7A84';
-      for (let x = 0; x < W; x++) if (rng() < 0.12) g.fillRect(x, skyH - 1, rng() < 0.5 ? 2 : 1, 1);
-      g.fillStyle = '#4E8A3E';
-      for (let k = 0; k < W / 18; k++) {
-        const x = Math.round(rng() * (W - 5));
-        g.fillRect(x, skyH - 1, 4, 1);
-        g.fillStyle = '#6FB05A';
-        g.fillRect(x + 1, skyH - 1, 1, 1);
-        g.fillStyle = '#4E8A3E';
+      // árboles lejanos (o pinos en la montaña)
+      g.fillStyle = T.hills[layer];
+      for (let x = 3 + Math.floor(rng() * 8); x < W - 3; x += 6 + Math.floor(rng() * (layer ? 10 : 18))) {
+        const r = layer ? 2 + Math.floor(rng() * 2) : 1 + Math.floor(rng() * 2);
+        const ty = tops[x] - r - (layer ? 2 : 1);
+        if (T.peaks) {
+          for (let q = 0; q < r * 2 + 2; q++) g.fillRect(x - Math.floor(q / 2), ty - r + q, Math.floor(q / 2) * 2 + 1, 1);
+        } else disc(g, x, ty, r);
+        g.fillRect(x, ty, 1, tops[x] - ty + 1);
       }
     }
-
-    // Raicillas bajo la superficie
-    g.fillStyle = T.roots;
-    for (let x = 0; x < W; x += run.cave ? 9 + Math.floor(rng() * 9) : 2 + Math.floor(rng() * 5)) {
-      const len = 2 + Math.floor(rng() * 6);
-      let px = x;
-      for (let y = soilTop; y < soilTop + len; y++) { g.fillRect(px, y, 1, 1); if (rng() < 0.3) px += rng() < 0.5 ? -1 : 1; }
+    const [g0, g1, g2] = T.grass;
+    g.fillStyle = g0;
+    g.fillRect(0, skyH, W, 2);
+    g.fillStyle = g1;
+    g.fillRect(0, skyH, W, 1);
+    for (let x = 0; x < W; x++) {
+      const h = rng() < (T.peaks ? 0.25 : 0.5) ? Math.floor(rng() * 3) : 0;
+      if (!h) continue;
+      g.fillStyle = rng() < 0.5 ? g1 : g2;
+      g.fillRect(x, skyH - h, 1, h);
+      if (h === 2 && rng() < 0.12) { g.fillStyle = rng() < 0.5 ? '#F49AC2' : '#FFD23F'; g.fillRect(x, skyH - h - 1, 1, 1); }
+    }
+    if (T.reeds) {
+      // juncos en la orilla, lejos de los árboles
+      for (let x = 4; x < W - 4; x += 5 + Math.floor(rng() * 9)) {
+        if (run.trees.some((t) => Math.abs(t.x - x) < 10)) continue;
+        const h = 5 + Math.floor(rng() * 6);
+        g.fillStyle = '#5E7A3A';
+        g.fillRect(x, skyH - h, 1, h);
+        g.fillStyle = '#8FAF5A';
+        g.fillRect(x + 1, skyH - h + 2, 1, h - 2);
+        g.fillStyle = '#6B4A2F';
+        g.fillRect(x, skyH - h - 2, 1, 3);
+      }
+    }
+    if (T.peaks) {
+      // piedras sueltas en la superficie
+      for (let x = 6; x < W - 6; x += 14 + Math.floor(rng() * 20)) {
+        if (run.trees.some((t) => Math.abs(t.x - x) < 9)) continue;
+        const w = 3 + Math.floor(rng() * 4);
+        g.fillStyle = PAL.stone;
+        g.fillRect(x, skyH - 2, w, 3);
+        g.fillStyle = PAL.stoneHi;
+        g.fillRect(x, skyH - 2, w - 1, 1);
+      }
     }
   }
 
   paintStone(g, s) {
-    if (s.kind === 'stalag') {
-      // estalagmita (sube) o estalactita (baja)
-      for (let y = s.y; y < s.y + s.h; y++) {
-        const t = s.up ? (y - s.y) / s.h : 1 - (y - s.y) / s.h;
-        const half = Math.max(0, Math.round((s.w / 2) * t));
-        const cx = s.x + Math.floor(s.w / 2);
-        g.fillStyle = '#3A3550';
-        g.fillRect(cx - half, y, half * 2 + 1, 1);
-        g.fillStyle = '#55507A';
-        g.fillRect(cx - half, y, 1, 1);
-        g.fillStyle = '#24203A';
-        g.fillRect(cx + half, y, 1, 1);
-        if (half === 0) { g.fillStyle = '#6A6490'; g.fillRect(cx, y, 1, 1); }
-      }
-      return;
-    }
     g.fillStyle = PAL.stone;
     g.fillRect(s.x + 1, s.y, s.w - 2, s.h);
     g.fillRect(s.x, s.y + 1, s.w, s.h - 2);
@@ -400,150 +459,19 @@ export class RunRenderer {
     g.fillRect(s.x + Math.floor(s.w / 2), s.y + 2, 1, Math.max(1, s.h - 4));
   }
 
-  makePlant(p) {
-    const run = this.run;
-    const { skyH, soilTop } = run;
-    const R = p.roots;
-    const w = R * 2 + 9;
-    const top = 0;
-    const h = p.y + R + 2;
-    const ox = Math.round(p.x - w / 2);
-    const rng = mulberry32(Math.round(p.x * 131 + 7));
-    const make = (on) => {
-      const c = makeCanvas(w, h);
-      const g = c.getContext('2d');
-      const cx = Math.floor(w / 2);
-      // Raíces
-      g.fillStyle = on ? (p.kind === 'tree' ? PAL.a : '#B6E35A') : (p.kind === 'tree' ? '#4E3524' : '#3E3A22');
-      const rr = mulberry32(Math.round(p.x * 17 + 3));
-      const n = p.kind === 'tree' ? 9 : 6;
-      for (let k = 0; k < n; k++) {
-        let a = Math.PI * (0.12 + 0.76 * (k / (n - 1))) + (rr() - 0.5) * 0.3;
-        let x = cx;
-        let y = soilTop;
-        const len = R * (0.7 + rr() * 0.35);
-        for (let s = 0; s < len; s += 2) {
-          a += (rr() - 0.5) * 0.5;
-          const nx = x + Math.cos(a) * 2;
-          const ny = y + Math.sin(a) * 2;
-          line(g, x, y, nx, ny);
-          x = nx; y = ny;
-        }
-      }
-      if (p.kind === 'tree') {
-        const trunkH = Math.max(6, Math.round(skyH * 0.5));
-        const tw = 3;
-        g.fillStyle = '#5A3C26';
-        g.fillRect(cx - 1, skyH - trunkH, tw, trunkH + 1);
-        g.fillStyle = '#7A5534';
-        g.fillRect(cx - 1, skyH - trunkH, 1, trunkH);
-        const cr = Math.max(4, Math.round(skyH * 0.28));
-        const cy = skyH - trunkH - Math.round(cr * 0.4);
-        g.fillStyle = '#24502E';
-        disc(g, cx, cy + 1, cr);
-        g.fillStyle = '#3E7A44';
-        disc(g, cx, cy, cr);
-        g.fillStyle = '#5FA155';
-        disc(g, cx - 1, cy - 1, Math.max(2, cr - 2));
-        g.fillStyle = '#8FD06A';
-        g.fillRect(cx - 2, cy - cr + 1, 2, 1);
-        if (on) {
-          g.fillStyle = PAL.a;
-          for (let k = 0; k < 5; k++) g.fillRect(cx - cr + 1 + Math.floor(rng() * (cr * 2 - 2)), cy - cr + 2 + Math.floor(rng() * (cr * 2 - 3)), 1, 1);
-        }
-      } else {
-        // juncos
-        for (let k = 0; k < 4; k++) {
-          const x = cx - 3 + k * 2;
-          const hh = Math.max(6, Math.round(skyH * (0.4 + rng() * 0.25)));
-          g.fillStyle = '#5E7A3A';
-          g.fillRect(x, skyH - hh, 1, hh + 1);
-          g.fillStyle = '#8FAF5A';
-          g.fillRect(x, skyH - hh + 3, 1, hh - 4);
-          if (k % 2 === 0) {
-            g.fillStyle = on ? '#B6E35A' : '#6B4A2F';
-            g.fillRect(x, skyH - hh - 1, 2, 4);
-          }
-        }
-      }
-      return c;
-    };
-    return { off: make(false), on: make(true), x: ox, y: top, h };
-  }
-
-  makeLog(l) {
-    const mk = (done) => {
-      const c = makeCanvas(l.w, l.h + 3);
-      const g = c.getContext('2d');
-      if (done) {
-        g.fillStyle = '#2E1F18';
-        g.fillRect(1, 3, l.w - 2, l.h - 1);
-        g.fillStyle = '#4E3122';
-        for (let k = 0; k < l.w; k += 3) g.fillRect(k, 3 + ((k * 7) % (l.h - 1)), 2, 1);
-        g.fillStyle = '#F49AC2';
-        g.fillRect(4, 1, 3, 1); g.fillRect(5, 2, 1, 2);
-        g.fillRect(l.w - 8, 0, 3, 1); g.fillRect(l.w - 7, 1, 1, 3);
-        return c;
-      }
-      g.fillStyle = PAL.logLo;
-      g.fillRect(0, 1, l.w, l.h + 1);
-      g.fillStyle = PAL.log;
-      g.fillRect(0, 0, l.w - 3, l.h);
-      g.fillStyle = PAL.logHi;
-      g.fillRect(0, 0, l.w - 3, 1);
-      for (let k = 2; k < l.w - 5; k += 5) g.fillRect(k, 3, 3, 1);
-      g.fillStyle = '#C9A27A';
-      g.fillRect(l.w - 4, 0, 3, l.h);
-      g.fillStyle = '#8A6A48';
-      g.fillRect(l.w - 3, 2, 1, l.h - 4);
-      return c;
-    };
-    return { off: mk(false), on: mk(true) };
-  }
-
-  peatSprite(p) {
-    let spr = this.sprites.get(p);
-    if (spr) return spr;
-    const mk = (done) => {
-      const c = makeCanvas(p.w, p.h);
-      const g = c.getContext('2d');
-      const rng = mulberry32(p.x * 13 + p.y);
-      // contorno oscuro, cuerpo de turba, fibras y musgo brillante
-      g.fillStyle = done ? '#1A2622' : '#140E08';
-      g.fillRect(1, 0, p.w - 2, p.h);
-      g.fillRect(0, 1, p.w, p.h - 2);
-      g.fillStyle = done ? '#24302A' : '#4A3A24';
-      g.fillRect(1, 1, p.w - 2, p.h - 2);
-      g.fillStyle = done ? '#2E3E36' : '#7A6040';
-      for (let k = 0; k < (p.w * p.h) / 5; k++) g.fillRect(1 + Math.floor(rng() * (p.w - 3)), 1 + Math.floor(rng() * (p.h - 2)), 2, 1);
-      if (!done) {
-        g.fillStyle = '#5E7A2A';
-        g.fillRect(1, 1, p.w - 2, 1);
-        g.fillStyle = '#B6E35A';
-        for (let k = 0; k < 5; k++) g.fillRect(1 + Math.floor(rng() * (p.w - 2)), 1 + Math.floor(rng() * (p.h - 2)), 1, 1);
-      }
-      return c;
-    };
-    spr = { off: mk(false), on: mk(true) };
-    this.sprites.set(p, spr);
-    return spr;
-  }
-
   makeAmbient() {
     const run = this.run;
     const { W, VH, skyH, soilTop } = run;
     this.ambient = [];
-    const flies = run.cave ? 8 : run.swamp ? 10 : 6;
-    for (let k = 0; k < flies; k++) this.ambient.push({ kind: 'fly', x: Math.random() * W, y: Math.random() * (skyH - 4) + 2, ph: Math.random() * 10 });
-    for (let k = 0; k < Math.round(W / 10); k++) this.ambient.push({ kind: 'mote', x: Math.random() * W, y: soilTop + Math.random() * (VH - soilTop), v: 1 + Math.random() * 2 });
-    for (const d of this.dripSrc) this.ambient.push({ kind: 'drip', x: d.x, y0: d.y, y: d.y + Math.random() * (skyH - d.y), v: 0, wait: Math.random() * 3 });
-    if (run.swamp) {
-      for (let k = 0; k < 14; k++) this.ambient.push({ kind: 'bubble', x: Math.random() * W, y: run.waterTop + Math.random() * (VH - run.waterTop), v: 4 + Math.random() * 5 });
-      for (let k = 0; k < 18; k++) this.ambient.push({ kind: 'flow', x: Math.random() * W, y: run.waterTop + 3 + Math.random() * (VH - run.waterTop - 6), len: 2 + Math.floor(Math.random() * 3) });
+    for (let k = 0; k < 7; k++) this.ambient.push({ kind: 'fly', x: Math.random() * W, y: skyH - 6 - Math.random() * 60, ph: Math.random() * 10 });
+    for (let k = 0; k < Math.round(W / 10); k++) this.ambient.push({ kind: 'mote', x: Math.random() * W, y: soilTop + Math.random() * VH, v: 1 + Math.random() * 2 });
+    if (run.st.waterBottom) {
+      const top = soilTop + run.st.waterTop;
+      for (let k = 0; k < Math.round(W / 8); k++) this.ambient.push({ kind: 'flow', x: Math.random() * W, y: top + 3 + Math.random() * (run.st.waterBottom - run.st.waterTop - 6), len: 2 + Math.floor(Math.random() * 3) });
     }
   }
 
-  // ── red, por trozos ──────────────────────────────────────────────────────
+  // ── raíces, por trozos ───────────────────────────────────────────────────
 
   net(k) {
     let n = this.netC[k];
@@ -555,81 +483,43 @@ export class RunRenderer {
     return n;
   }
 
-  /** Línea de hifa con su sombra debajo (la sombra va siempre detrás de toda la red). */
-  drawSeg(s) {
-    const ka = Math.floor(Math.min(s[1], s[3]) / CH);
-    const kb = Math.floor((Math.max(s[1], s[3]) + 2) / CH);
-    for (let k = ka; k <= kb; k++) {
-      const { g } = this.net(k);
-      const oy = k * CH;
+  /** Llama a fn(g, oy) en cada trozo que toca el tramo (con margen para el grosor). */
+  eachChunk(s, m, fn) {
+    const ka = Math.floor((Math.min(s[1], s[3]) - m) / CH);
+    const kb = Math.floor((Math.max(s[1], s[3]) + m) / CH);
+    for (let k = Math.max(0, ka); k <= kb; k++) fn(this.net(k).g, k * CH);
+  }
+
+  /** Tramo de una raíz que crece: fina y clara, con su sombra detrás. */
+  drawLiveSeg(s) {
+    this.eachChunk(s, 2, (g, oy) => {
       g.globalCompositeOperation = 'destination-over';
-      g.fillStyle = this.hyphaCol[1];
+      g.fillStyle = ROOT.liveLo;
       line(g, s[0] + 1, s[1] + 1 - oy, s[2] + 1, s[3] + 1 - oy);
       g.globalCompositeOperation = 'source-over';
-      g.fillStyle = this.hyphaCol[0];
+      g.fillStyle = ROOT.live;
       line(g, s[0], s[1] - oy, s[2], s[3] - oy);
-    }
+    });
   }
 
-  /** Las colonias borran la red que se comen. */
-  eraseDisc(x, y, r) {
-    const ka = Math.floor((y - r - 1) / CH);
-    const kb = Math.floor((y + r + 1) / CH);
-    for (let k = Math.max(0, ka); k <= kb; k++) {
-      const n = this.netC[k];
-      if (!n) continue;
-      n.g.globalCompositeOperation = 'destination-out';
-      disc(n.g, x, y - k * CH, r);
-      n.g.globalCompositeOperation = 'source-over';
-    }
-  }
-
-  /**
-   * Capa de oscuridad de lo que se ve (una casilla = un píxel): lo no explorado, negro;
-   * lo explorado, en penumbra; y luz plena solo alrededor de las puntas que crecen y de la espora.
-   */
-  updateDark(cam) {
-    const run = this.run;
-    const { gw } = run;
-    const j0 = Math.floor(cam / CELL);
-    const rows = Math.ceil(run.VH / CELL) + 2;
-    if (!this.darkC || this.darkRows !== rows) {
-      this.darkRows = rows;
-      this.darkC = makeCanvas(gw, rows);
-      this.darkImg = this.darkC.getContext('2d').createImageData(gw, rows);
-      this.alpha = new Uint8Array(gw * rows);
-    }
-    const A = this.alpha;
-    const top = Math.floor(run.soilTop / CELL);
-    for (let j = 0; j < rows; j++) {
-      const J = j0 + j;
-      // cuanto más hondo, más negra la roca sin explorar
-      const black = Math.min(250, 236 + Math.floor((J * CELL - run.soilTop) / 150) * 3);
-      for (let i = 0; i < gw; i++) A[j * gw + i] = J < top ? 0 : run.lit.has(J * gw + i) ? 130 : black;
-    }
-    const R = run.lightCells + 1;
-    const light = (x, y, r) => {
-      const ci = Math.floor(x / CELL);
-      const cj = Math.floor(y / CELL) - j0;
-      for (let j = Math.max(top - j0, 0, cj - r); j <= Math.min(rows - 1, cj + r); j++) {
-        for (let i = Math.max(0, ci - r); i <= Math.min(gw - 1, ci + r); i++) {
-          const d2 = (i - ci) ** 2 + (j - cj) ** 2;
-          if (d2 > r * r + r) continue;
-          const a = d2 >= (r - 1) * (r - 1) ? 70 : 0;
-          const g = j * gw + i;
-          if (a < A[g]) A[g] = a;
+  /** Una raíz que se ha parado: más oscura y gruesa, más cuanto más cerca del tronco. */
+  drawOldRoot(r) {
+    const n = r.segs.length;
+    if (!n) return;
+    const w0 = r.gen === 0 ? 3 : r.gen === 1 ? 2 : 1;
+    r.segs.forEach((s, i) => {
+      const w = Math.max(1, Math.round(w0 - (w0 - 1) * (i / n) * 1.3));
+      this.eachChunk(s, w + 1, (g, oy) => {
+        g.fillStyle = ROOT.oldLo;
+        line(g, s[0] + 1, s[1] + 1 - oy, s[2] + 1, s[3] + 1 - oy, w);
+        g.fillStyle = ROOT.old;
+        line(g, s[0], s[1] - oy, s[2], s[3] - oy, w);
+        if (w >= 2) {
+          g.fillStyle = ROOT.oldHi;
+          line(g, s[0] - Math.floor(w / 2), s[1] - oy, s[2] - Math.floor(w / 2), s[3] - oy);
         }
-      }
-    };
-    light(run.cx, run.cy, R + 1);
-    for (const tip of run.tips) light(tip.x, tip.y, R);
-    const d = this.darkImg.data;
-    for (let g = 0; g < A.length; g++) {
-      const k = g * 4;
-      d[k] = 5; d[k + 1] = 4; d[k + 2] = 10; d[k + 3] = A[g];
-    }
-    this.darkC.getContext('2d').putImageData(this.darkImg, 0, 0);
-    this.darkY = j0 * CELL - cam;
+      });
+    });
   }
 
   // ── pantalla ─────────────────────────────────────────────────────────────
@@ -659,39 +549,63 @@ export class RunRenderer {
 
   /** Efectos de los sucesos de la temporada (en coordenadas del mundo). */
   onEvent(e) {
-    const run = this.run;
-    const colorOf = (cur, kind) => (cur === 'm' ? PAL.m : cur === 't' ? '#B6E35A' : cur === 'c' ? '#C79BFF' : cur === 'a' ? PAL.a : kind === 'leaf' ? PAL.leaf : kind === 'guano' ? '#D9C9A0' : PAL.n);
+    const burst = (x, y, n, v, life, color) => {
+      for (let k = 0; k < n; k++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = v * (0.5 + Math.random() * 0.7);
+        this.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life, color: typeof color === 'function' ? color(k) : color });
+      }
+    };
     if (e.type === 'absorb') {
-      const color = colorOf(e.cur, e.kind);
-      for (let k = 0; k < 5; k++) {
-        const a = Math.random() * Math.PI * 2;
-        this.fx.push({ x: e.x, y: e.y, vx: Math.cos(a) * 28, vy: Math.sin(a) * 28, life: 0.4, color });
+      const color = e.kind === 'big' ? '#B6E35A' : PAL.n;
+      burst(e.x, e.y, e.kind === 'big' ? 12 : 5, 28, 0.45, color);
+      this.floaters.push({ x: e.x, y: e.y - 4, text: `+${e.text}`, color: GROWTH_COL, life: 1 });
+      if (e.sprouted) {
+        this.floaters.push({ x: e.x, y: e.y - 12, text: '+1 brote', color: '#D2F7A0', life: 1.4, big: true });
+        burst(e.x, e.y, 14, 40, 0.7, (k) => (k % 2 ? '#B6E35A' : '#FFF8E4'));
+        this.shake = 0.12;
       }
-      this.collect(e.x, e.y, e.cur, color, 3);
-      this.floaters.push({ x: e.x, y: e.y - 4, text: `+${e.text}`, color, life: 1 });
-    } else if (e.type === 'log' || e.type === 'peat' || e.type === 'colony') {
-      const color = colorOf(e.cur);
-      for (let k = 0; k < 26; k++) {
-        const a = Math.random() * Math.PI * 2;
-        const v = 20 + Math.random() * 45;
-        this.fx.push({ x: e.x, y: e.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.7, color: e.type === 'colony' ? (k % 2 ? '#FF6B81' : color) : k % 2 ? PAL.logHi : color });
-      }
-      this.collect(e.x, e.y, e.cur, color, 8);
-      this.floaters.push({ x: e.x, y: e.y - 6, text: `+${e.text}`, color, life: 1.3, big: true });
-      this.shake = 0.22;
-    } else if (e.type === 'plant') {
-      this.floaters.push({ x: e.x, y: e.y, text: e.kind === 'tree' ? 'Pacto · azúcar' : 'Juncos · turba', color: e.kind === 'tree' ? PAL.a : '#B6E35A', life: 1.4, big: true });
-      for (let k = 0; k < 14; k++) this.fx.push({ x: e.x, y: run.soilTop, vx: (Math.random() - 0.5) * 40, vy: -Math.random() * 40, life: 0.8, color: e.kind === 'tree' ? PAL.a : '#B6E35A' });
-    } else if (e.type === 'pickup') {
-      for (let k = 0; k < 8; k++) this.fx.push({ x: e.x, y: e.y, vx: (Math.random() - 0.5) * 24, vy: -Math.random() * 24, life: 0.6, color: '#FFF8E4' });
-    } else if (e.type === 'jump') {
-      for (let k = 0; k < 24; k++) {
-        const a = Math.random() * Math.PI * 2;
-        this.fx.push({ x: e.x, y: e.y, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, life: 0.7, color: k % 2 ? '#FFF8E4' : this.hyphaCol[0] });
-      }
-      this.floaters.push({ x: e.x, y: e.y - 6, text: '¡Salto!', color: '#FFF8E4', life: 1.3, big: true });
-    } else if (e.type === 'bite') {
-      for (let k = 0; k < 4; k++) this.fx.push({ x: e.x, y: e.y, vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30, life: 0.3, color: '#FF6B81' });
+    } else if (e.type === 'sprout') {
+      burst(e.x, e.y, 7, 22, 0.5, (k) => (k % 2 ? '#B6E35A' : ROOT.liveHi));
+    } else if (e.type === 'stop') {
+      this.drawOldRoot(e.r);
+      if (e.why !== 'end') burst(e.x, e.y, 4, 14, 0.4, e.why === 'rock' ? '#8A8494' : ROOT.old);
+    } else if (e.type === 'catch') {
+      const color = e.gold ? PAL.a : '#FF6B81';
+      burst(e.x, e.y, e.gold ? 16 : 8, 36, 0.5, (k) => (k % 2 ? color : '#FFF8E4'));
+      this.collect(e.x, e.y, 'f', color, e.gold ? 8 : 4);
+      this.floaters.push({ x: e.x, y: e.y - 6, text: `+${e.text}`, color, life: 1.1, big: true });
+    } else if (e.type === 'land') {
+      burst(e.x, e.y, 3, 16, 0.35, '#8FD06A');
+      this.collect(e.x, e.y, 'f', e.gold ? PAL.a : PAL.red, 2);
+      this.floaters.push({ x: e.x, y: e.y - 4, text: `+${e.text}`, color: 'rgba(244,233,216,0.75)', life: 0.8 });
+    } else if (e.type === 'link') {
+      // dos árboles se unen por las raíces
+      burst(e.x, e.y, 14, 30, 0.7, (k) => (k % 2 ? '#B48EF0' : '#FFF8E4'));
+      this.floaters.push({ x: e.x, y: e.y - 6, text: `unión +${Math.round(e.amount * 100)}%`, color: '#D9C2FF', life: 1.3 });
+    } else if (e.type === 'dead') {
+      // raíz muerta absorbida: se ilumina en ámbar
+      const d = e.d;
+      this.eachChunk([d.x0, d.y0, d.x1, d.y1], 3, (gg, oy) => {
+        gg.fillStyle = '#7A5A30';
+        line(gg, d.x0, d.y0 - oy, d.x1, d.y1 - oy, 2);
+        gg.fillStyle = '#E0B060';
+        line(gg, d.x0, d.y0 - oy, d.x1, d.y1 - oy);
+      });
+      if (Math.random() < 0.5) this.fx.push({ x: e.x, y: e.y, vx: (Math.random() - 0.5) * 20, vy: -10 - Math.random() * 14, life: 0.5, color: '#FFE27A' });
+    } else if (e.type === 'stump') {
+      burst(e.x, e.y, 34, 50, 0.9, (k) => (k % 3 === 0 ? '#B6E35A' : k % 2 ? '#E0B060' : '#8A6A48'));
+      this.floaters.push({ x: e.x, y: e.y - 10, text: `+${e.text}`, color: GROWTH_COL, life: 1.4, big: true });
+      this.floaters.push({ x: e.x, y: e.y - 22, text: '+2 brotes', color: '#D2F7A0', life: 1.6, big: true });
+      this.shake = 0.25;
+    } else if (e.type === 'water') {
+      burst(e.x, e.y, 10, 26, 0.6, (k) => (k % 2 ? '#7FD1E8' : '#E2FBFF'));
+      this.floaters.push({ x: e.x, y: e.y - 6, text: `+${Math.round(e.amount * 100)}%`, color: '#9FE2F2', life: 1.2 });
+    } else if (e.type === 'steal') {
+      burst(e.x, e.y, 6, 20, 0.5, '#C93A64');
+      this.floaters.push({ x: e.x, y: e.y - 4, text: 'zarza', color: '#FF8FA8', life: 0.9 });
+    } else if (e.type === 'grow') {
+      this.growFx = 0;
     }
     if (this.floaters.length > 40) this.floaters.splice(0, this.floaters.length - 40);
     if (this.fx.length > 500) this.fx.splice(0, this.fx.length - 500);
@@ -706,18 +620,123 @@ export class RunRenderer {
     }
   }
 
-  /** Mueve la cámara: baja con lo más hondo de la red y, al acabar, sube a la superficie. */
+  /**
+   * Cámara. Con raíces: sigue a la más honda que crece, y si caben todas, que se vean todas.
+   * Al acabar: sube hasta ver entero el árbol más alto.
+   */
   moveCamera(dt) {
     const run = this.run;
-    if (!run.ended) {
-      this.camTarget = Math.max(this.camTarget, run.maxDepth - run.VH * 0.62);
-      this.camY += (this.camTarget - this.camY) * Math.min(1, dt * 3);
-    } else {
-      this.camY += (0 - this.camY) * Math.min(1, dt * 4.5);
-      if (this.camY < 0.5) this.camY = 0;
+    let target = run.harvestCam;
+    let speed = 4;
+    if (run.phase === 'roots') {
+      speed = 2.5;
+      target = this.camTarget;
+      if (run.tips.length) {
+        let deep = -Infinity;
+        let shallow = Infinity;
+        for (const r of run.tips) { if (r.y > deep) deep = r.y; if (r.y < shallow) shallow = r.y; }
+        target = deep - run.VH * 0.62;
+        if (shallow - 16 < target && deep - shallow < run.VH - 40) target = shallow - 16;
+      }
+      target = Math.max(run.startCam, target);
+      this.camTarget = target;
     }
+    this.camY += (target - this.camY) * Math.min(1, dt * speed);
     this.camY = Math.max(0, this.camY);
     this.cam = Math.round(this.camY);
+  }
+
+  /** Árbol: brote mientras crecen las raíces; al acabar, crece hasta su tamaño. p: 0 → 1. */
+  drawTree(g, tree, p, cam) {
+    const run = this.run;
+    const { soilTop } = run;
+    const x = tree.x;
+    // cuello de la raíz, bajo tierra
+    g.fillStyle = BARK[0];
+    g.fillRect(x - 2, soilTop - 1, 5, 3);
+    g.fillStyle = BARK[1];
+    g.fillRect(x - 1, soilTop - 1, 3, 4);
+    if (p <= 0) {
+      // brote
+      const y = soilTop - 1 - cam;
+      g.fillStyle = '#5FA14A';
+      g.fillRect(x, y - 6, 1, 6);
+      g.fillStyle = LEAF[3];
+      g.fillRect(x - 3, y - 7, 3, 2);
+      g.fillRect(x + 1, y - 9, 3, 2);
+      g.fillStyle = LEAF[4];
+      g.fillRect(x - 3, y - 7, 1, 1);
+      g.fillRect(x + 3, y - 9, 1, 1);
+      return;
+    }
+    const S = treeShape(tree.growth * ease(p), soilTop, x);
+    const cy = S.cy - cam;
+    const base = soilTop - cam;
+    const tw = Math.max(2, Math.round(S.h / 12));
+    const tx = x - Math.floor(tw / 2);
+    // tronco con su luz a la izquierda y su sombra a la derecha, más ancho en la base
+    g.fillStyle = BARK[1];
+    g.fillRect(tx, cy, tw, base - cy);
+    g.fillRect(tx - 1, base - 2, tw + 2, 2);
+    g.fillStyle = BARK[2];
+    g.fillRect(tx, cy, 1, base - cy);
+    g.fillStyle = BARK[0];
+    g.fillRect(tx + tw - 1, cy, 1, base - cy);
+    // ramas hacia la copa
+    g.fillStyle = BARK[1];
+    const by = Math.round(cy + (base - cy) * 0.35);
+    line(g, x, by, x - S.cr * 0.55, cy - S.cr * 0.2, Math.max(1, tw - 1));
+    line(g, x, by + 2, x + S.cr * 0.6, cy - S.cr * 0.1, Math.max(1, tw - 1));
+    // copa: manchas de hojas en tres tonos
+    const blobs = this.crowns[tree.i];
+    const R = S.cr;
+    g.fillStyle = LEAF[0];
+    for (const [bx, b2, br] of blobs) disc(g, x + bx * R, cy + b2 * R + 1, R * br);
+    g.fillStyle = LEAF[2];
+    for (const [bx, b2, br] of blobs) disc(g, x + bx * R, cy + b2 * R, R * br - 1);
+    g.fillStyle = LEAF[3];
+    for (const [bx, b2, br] of blobs) disc(g, x + bx * R - 1, cy + b2 * R - 1, Math.max(1, R * br * 0.55));
+    // textura: matas de hojas en el borde (oscuras abajo, claras arriba) y brillos sueltos
+    const rng = mulberry32((tree.i * 7919 + 13) >>> 0);
+    for (const [bx, b2, br] of blobs) {
+      const bxx = x + bx * R;
+      const byy = cy + b2 * R;
+      const rr = R * br;
+      for (let q = 0; q < rr * 1.6; q++) {
+        const a = rng() * Math.PI * 2;
+        const d = rr * (0.75 + rng() * 0.3);
+        const px = Math.round(bxx + Math.cos(a) * d);
+        const py = Math.round(byy + Math.sin(a) * d);
+        g.fillStyle = Math.sin(a) > 0.2 ? LEAF[1] : Math.sin(a) < -0.3 ? LEAF[3] : LEAF[2];
+        g.fillRect(px, py, 2, 2);
+      }
+    }
+    g.fillStyle = LEAF[4];
+    for (const [bx, b2, br] of blobs) {
+      g.fillRect(Math.round(x + bx * R - R * br * 0.4), Math.round(cy + b2 * R - R * br * 0.45), 2, 1);
+      if (rng() < 0.7) g.fillRect(Math.round(x + bx * R + R * br * 0.1), Math.round(cy + b2 * R - R * br * 0.6), 1, 1);
+    }
+    g.fillStyle = LEAF[1];
+    for (let q = 0; q < R * 0.8; q++) g.fillRect(Math.round(x + (rng() - 0.5) * R * 1.4), Math.round(cy + rng() * R * 0.6), 1, 1);
+  }
+
+  drawFruit(g, f, cam, t) {
+    const run = this.run;
+    let x = Math.round(f.x) - 2;
+    const y = Math.round(f.y - cam) - 2;
+    if (f.state === 'hang' && run.phaseT > f.drop - 0.45) x += Math.floor(t * 18) % 2 ? 1 : 0; // tiembla antes de caer
+    const spr = f.gold ? bitmap(SPR.fruit, PAL.a, '#FFF8C0') : bitmap(SPR.fruit, PAL.red, '#FFB3C0');
+    g.drawImage(spr, x, y);
+    g.fillStyle = f.gold ? '#B8901A' : '#9E2A3E';
+    g.fillRect(x + 1, y + 3, 2, 1);
+    if (f.state !== 'land') {
+      g.fillStyle = LEAF[3];
+      g.fillRect(x + 2, y - 1, 1, 1);
+    }
+    if (f.gold && Math.floor(t * 4 + f.id) % 3 === 0) {
+      g.fillStyle = '#FFF8E4';
+      g.fillRect(x + 4, y - 1, 1, 1);
+    }
   }
 
   draw(dt, pointer, settings) {
@@ -726,25 +745,40 @@ export class RunRenderer {
     this.time += dt;
     this.moveCamera(dt);
     const { g, buf, cam } = this;
-    const { W, VH, skyH, soilTop } = run;
+    const { W, VH, soilTop } = run;
     const t = this.time;
     const k0 = Math.floor(cam / CH);
     const k1 = Math.floor((cam + VH - 1) / CH);
     const vis = (y, m = 8) => y > cam - m && y < cam + VH + m;
+    const roots = run.phase === 'roots';
 
-    // Red nueva
+    // Raíces nuevas
     if (run.newSegs.length) {
-      for (const s of run.newSegs) {
-        this.drawSeg(s);
-        this.recent.push({ s, t });
+      for (const n of run.newSegs) {
+        if (!n.r.alive) continue; // ya se pintó entera como raíz vieja
+        this.drawLiveSeg(n.s);
+        this.recent.push({ s: n.s, t });
       }
       run.newSegs.length = 0;
       if (this.recent.length > 700) this.recent.splice(0, this.recent.length - 700);
     }
-    // Las colonias de la zona activa se comen la red
-    if (!run.ended) {
-      const ka = Math.max(0, Math.floor((run.maxDepth - VH * 1.5) / CH));
-      for (let k = ka; k <= k1 + 1; k++) for (const c of bucket(run, k).colonies) if (!c.dead) this.eraseDisc(c.x, c.y, c.r);
+
+    // Zarzas nuevas: tallo granate con espinas
+    if (run.newBramSegs.length) {
+      for (const sg of run.newBramSegs) {
+        this.eachChunk(sg, 2, (gg, oy) => {
+          gg.fillStyle = '#2A0E1C';
+          line(gg, sg[0] + 1, sg[1] + 1 - oy, sg[2] + 1, sg[3] + 1 - oy);
+          gg.fillStyle = '#6A2440';
+          line(gg, sg[0], sg[1] - oy, sg[2], sg[3] - oy, 2);
+          if (Math.random() < 0.35) {
+            gg.fillStyle = '#C93A64';
+            const a = Math.atan2(sg[3] - sg[1], sg[2] - sg[0]) + (Math.random() < 0.5 ? 1.6 : -1.6);
+            gg.fillRect(Math.round(sg[2] + Math.cos(a) * 2), Math.round(sg[3] - oy + Math.sin(a) * 2), 1, 1);
+          }
+        });
+      }
+      run.newBramSegs.length = 0;
     }
 
     // Fondo
@@ -752,36 +786,23 @@ export class RunRenderer {
     g.fillRect(0, 0, W, VH);
     for (let k = k0; k <= k1; k++) g.drawImage(this.chunkBg(k), 0, k * CH - cam);
 
-    // Ambiente: corriente, burbujas, motas, gotas
-    const floorY = Math.max(soilTop, cam);
+    // Motas en la tierra
+    const floorY = Math.max(soilTop + 2, cam);
+    g.fillStyle = this.theme.mote;
     for (const a of this.ambient) {
-      if (a.kind === 'mote') {
-        a.y -= a.v * dt;
-        if (a.y < floorY || a.y > cam + VH) { a.y = a.y < floorY && a.y > cam - 4 ? cam + VH - 1 : floorY + Math.random() * (cam + VH - floorY); a.x = Math.random() * W; }
-        g.fillStyle = run.cave ? '#2C2840' : run.swamp ? '#2E4044' : '#3E2E4C';
-        g.fillRect(Math.round(a.x), Math.round(a.y - cam), 1, 1);
-      } else if (a.kind === 'bubble') {
-        const top = Math.max(run.waterTop, cam);
-        a.y -= a.v * dt;
-        if (a.y < top || a.y > cam + VH) { a.y = a.y < top && a.y > cam - 4 ? cam + VH - 1 : top + Math.random() * (cam + VH - top); a.x = Math.random() * W; }
-        g.fillStyle = '#3E6A70';
-        g.fillRect(Math.round(a.x), Math.round(a.y - cam), 1, 1);
-      } else if (a.kind === 'drip') {
-        // gota que cae de una estalactita al suelo de la cueva
-        if (a.wait > 0) { a.wait -= dt; continue; }
-        a.v += 60 * dt;
-        a.y += a.v * dt;
-        if (a.y >= skyH) { a.y = a.y0; a.v = 0; a.wait = 1 + Math.random() * 3; continue; }
-        if (vis(a.y)) { g.fillStyle = '#5A7AB0'; g.fillRect(a.x, Math.round(a.y - cam), 1, 1); }
-      } else if (a.kind === 'flow') {
-        const top = Math.max(run.waterTop + 3, cam);
-        if (a.y < top || a.y > cam + VH) a.y = top + Math.random() * Math.max(1, cam + VH - top);
-        a.x += run.flow * run.st.current * 0.8 * dt;
-        if (a.x < -4) a.x = W + 2;
-        if (a.x > W + 4) a.x = -2;
-        g.fillStyle = '#2C474C';
-        g.fillRect(Math.round(a.x), Math.round(a.y - cam), a.len, 1);
-      }
+      if (a.kind !== 'mote') continue;
+      a.y -= a.v * dt;
+      if (a.y < floorY || a.y > cam + VH) { a.y = a.y < floorY && a.y > cam - 4 ? cam + VH - 1 : floorY + Math.random() * Math.max(1, cam + VH - floorY); a.x = Math.random() * W; }
+      g.fillRect(Math.round(a.x), Math.round(a.y - cam), 1, 1);
+    }
+    // Ribera: la corriente del agua subterránea
+    g.fillStyle = '#3E7088';
+    for (const a of this.ambient) {
+      if (a.kind !== 'flow') continue;
+      a.x += run.flow * run.st.current * 0.9 * dt;
+      if (a.x < -4) a.x = W + 2;
+      if (a.x > W + 4) a.x = -2;
+      if (vis(a.y, 2)) g.fillRect(Math.round(a.x), Math.round(a.y - cam), a.len, 1);
     }
     // Agua: brillos que parpadean
     g.fillStyle = PAL.waterHi;
@@ -792,174 +813,152 @@ export class RunRenderer {
         else g.fillRect(p.x + 1, p.y - 1 - cam, 2, 1);
       }
     }
-    if (run.swamp && vis(skyH)) {
-      g.fillStyle = '#3E7A84';
-      for (let x = (Math.floor(t * 3) % 7); x < W; x += 13) g.fillRect(x, skyH - cam, 2, 1);
-    }
 
-    // Plantas y troncos (superficie), turba
-    run.plants.forEach((p, k) => {
-      const spr = this.plantSprites[k];
-      if (spr.y + spr.h > cam) g.drawImage(p.connected ? spr.on : spr.off, spr.x, spr.y - cam);
-    });
-    run.logs.forEach((l, k) => { if (vis(l.y, 12)) { const spr = this.logSprites[k]; g.drawImage(l.done ? spr.on : spr.off, l.x, l.y - 2 - cam); } });
-    for (let k = k0 - 1; k <= k1 + 1; k++) {
-      for (const p of bucket(run, k).peats) {
-        if (!vis(p.y, 16)) continue;
-        const spr = this.peatSprite(p);
-        g.drawImage(p.done ? spr.on : spr.off, p.x, p.y - cam);
+    // Bosque viejo: la madera de los tocones bajo tierra (debajo de las raíces, para verlas entrar)
+    if (cam < soilTop + 16) {
+      for (const sp of run.stumps) {
+        const y = soilTop - cam;
+        g.fillStyle = sp.done ? '#1A1410' : '#5A4028';
+        g.fillRect(sp.x, y + 1, sp.w, sp.h);
+        g.fillStyle = sp.done ? '#3A2C20' : '#7A5A38';
+        for (let q = 0; q < sp.h; q += 3) g.fillRect(sp.x + 1, y + 2 + q, sp.w - 2, 1);
       }
     }
 
-    // Red: trozos ya dibujados y la estela reciente más clara
+    // Raíces: trozos ya dibujados y la estela reciente más clara
     for (let k = k0; k <= k1; k++) if (this.netC[k]) g.drawImage(this.netC[k].c, 0, k * CH - cam);
-    g.fillStyle = this.hyphaCol[2];
+    g.fillStyle = ROOT.liveHi;
     const keep = [];
     for (const r of this.recent) {
-      if (t - r.t > 0.6) continue;
+      if (t - r.t > 0.5) continue;
       if (vis(r.s[3], 2)) line(g, r.s[0], r.s[1] - cam, r.s[2], r.s[3] - cam);
       keep.push(r);
     }
     this.recent = keep;
 
-    // Colonias rivales: masa de bacterias con borde que se mueve y puntos dentro
-    for (let k = k0 - 1; k <= k1 + 1; k++) {
-      bucket(run, k).colonies.forEach((c, ci) => {
-        if (c.dead || !vis(c.y, 20)) return;
-        const cy = c.y - cam;
-        const r = c.r + (Math.floor(t * 3 + ci) % 2) * 0.5;
-        g.fillStyle = '#3A0E20';
-        disc(g, c.x, cy + 1, r + 1);
-        g.fillStyle = '#9E2A4E';
-        disc(g, c.x, cy, r);
-        g.fillStyle = '#C93A64';
-        disc(g, c.x - 1, cy - 1, Math.max(1, r - 2));
-        const cr = mulberry32(Math.round(c.x * 977 + c.y * 13));
-        for (let q = 0; q < r * 2; q++) {
-          const a = cr() * Math.PI * 2;
-          const d = Math.sqrt(cr()) * (r - 1);
-          const wob = Math.sin(t * 2 + q) * 0.6;
-          g.fillStyle = q % 3 ? '#7A1E3E' : '#FF9AB4';
-          g.fillRect(Math.round(c.x + Math.cos(a) * d + wob), Math.round(cy + Math.sin(a) * d), 1, 1);
-        }
-        g.fillStyle = '#FFC2D2';
-        g.fillRect(Math.round(c.x - r * 0.45), Math.round(cy - r * 0.55), 2, 1);
-        g.fillStyle = Math.floor(t * 4) % 2 ? '#FF6B81' : '#5A1730';
-        for (let q = 0; q < 10; q++) {
-          const a = (q / 10) * Math.PI * 2 + t * 0.7;
-          g.fillRect(Math.round(c.x + Math.cos(a) * (r + 1)), Math.round(cy + Math.sin(a) * (r + 1)), 1, 1);
-        }
-        if (c.hp < run.st.colonyHp) {
-          g.fillStyle = '#FFF3D6';
-          g.fillRect(Math.round(c.x - 3), Math.round(cy - c.r - 3), Math.round(6 * Math.max(0, c.hp / run.st.colonyHp)), 1);
-        }
-      });
-    }
-
-    // Bolsas de comida (con un brillo que recorre)
+    // Bolsas de comida (las gordas, con un brote encima)
     for (let k = k0 - 1; k <= k1 + 1; k++) {
       for (const p of bucket(run, k).pockets) {
         if (!vis(p.y)) continue;
-        const [c1, c2] = POCKET_COL[p.type];
-        const spr = bitmap(SPR[p.type], c1, c2);
+        const big = p.type === 'big';
+        const spr = p.type === 'vein' ? bitmap(SPR.vein, '#5FCDE4', '#E2FBFF') : big ? bitmap(SPR.big, '#8FCB45', '#E2FBB0') : bitmap(SPR.n, PAL.n, '#FFC27A');
         const x = Math.round(p.x - spr.width / 2);
         const y = Math.round(p.y - cam - spr.height / 2);
+        if (big) {
+          // bolsa gorda: verde como los brotes, con un anillo que late
+          g.fillStyle = Math.floor(t * 3 + p.x) % 2 ? 'rgba(182,227,90,0.55)' : 'rgba(182,227,90,0.25)';
+          for (let q = 0; q < 12; q++) {
+            const a = (q / 12) * Math.PI * 2;
+            g.fillRect(Math.round(p.x + Math.cos(a) * 6), Math.round(p.y - cam + Math.sin(a) * 6), 1, 1);
+          }
+        }
         g.drawImage(spr, x, y);
+        if (p.type === 'vein' && Math.floor(t * 2 + p.x * 0.7) % 5 === 0) {
+          g.fillStyle = '#FFFFFF';
+          g.fillRect(x + 2, y - 2, 1, 2);
+          g.fillRect(x + 4, y + 1, 2, 1);
+        }
         if (Math.floor(t * 1.5 + p.x * 0.37) % 6 === 0) { g.fillStyle = '#FFFFFF'; g.fillRect(x + 1, y + 1, 1, 1); }
       }
     }
 
-    // Grillos (y la espora que llevan encima) y murciélagos del techo
-    for (let k = k0 - 1; k <= k1 + 1; k++) {
-      for (const c of bucket(run, k).crickets) {
-        if (!vis(c.y)) continue;
-        const x = Math.round(c.x);
-        const y = Math.round(c.y - cam) - (c.air > 0 ? 1 : 0);
-        g.fillStyle = '#7A5A30';
-        g.fillRect(x - 1, y, 3, 1);
-        g.fillRect(x - 2, y + 1, 1, 1);
-        g.fillRect(x + 2, y + 1, 1, 1);
-        g.fillStyle = '#B8935A';
-        g.fillRect(x, y - 1, 2, 1);
-        g.fillRect(x + 2, y - 2, 1, 1);
-        if (c.carry > 0) {
-          g.fillStyle = Math.floor(t * 8) % 2 ? '#FFF8E4' : this.hyphaCol[0];
-          g.fillRect(x, y - 3, 1, 1);
+    // Bosque viejo: tocones (encima de la tierra) y su madera bajo la superficie
+    if (cam < soilTop + 16) {
+      for (const sp of run.stumps) {
+        const x = sp.x;
+        const y = soilTop - cam;
+        if (sp.done) {
+          g.fillStyle = '#2A2018';
+          g.fillRect(x + 1, y - 2, sp.w - 2, 2);
+          g.fillStyle = '#4E8A3E';
+          for (let q = 1; q < sp.w - 1; q += 3) g.fillRect(x + q, y - 3, 2, 1);
+          continue;
         }
-      }
-    }
-    if (cam < 12) {
-      for (const b of run.bats) {
-        const spr = bitmap(SPR.bat, '#2E2840', '#000');
-        g.drawImage(spr, Math.round(b.x - 3), 1 - cam);
-        if (Math.floor(t * 1.3 + b.x) % 5) {
-          g.fillStyle = '#FFD23F';
-          g.fillRect(Math.round(b.x - 1), 3 - cam, 1, 1);
-          g.fillRect(Math.round(b.x + 1), 3 - cam, 1, 1);
+        // tronco cortado con sus anillos
+        g.fillStyle = '#3A2818';
+        g.fillRect(x - 2, y - 2, sp.w + 4, 3);
+        g.fillStyle = '#4A3424';
+        g.fillRect(x, y - 8, sp.w, 8);
+        g.fillStyle = '#6A4A30';
+        g.fillRect(x + 1, y - 8, 2, 8);
+        g.fillStyle = '#8A6A48';
+        g.fillRect(x, y - 8, sp.w, 1);
+        g.fillStyle = '#A88A62';
+        g.fillRect(x + 2, y - 8, sp.w - 4, 1);
+        g.fillStyle = '#5E8A3A';
+        g.fillRect(x + 1, y - 9, 3, 1);
+        g.fillRect(x + sp.w - 5, y - 9, 2, 1);
+        // cuánto falta para descomponerlo
+        if (sp.prog > 0) {
+          const f = Math.min(1, sp.prog / run.st.stumpNeed);
+          g.fillStyle = PAL.ink;
+          g.fillRect(x - 1, y - 13, sp.w + 2, 3);
+          g.fillStyle = '#B6E35A';
+          g.fillRect(x, y - 12, Math.max(1, Math.round(sp.w * f)), 1);
         }
       }
     }
 
-    // Puntas: brillo que parpadea
-    for (const tip of run.tips) {
-      if (!vis(tip.y)) continue;
-      const x = Math.round(tip.x);
-      const y = Math.round(tip.y - cam);
-      g.fillStyle = this.hyphaCol[0];
+    // Árboles: brote mientras crecen las raíces; al acabar, crecen
+    const growP = run.phase === 'grow' ? Math.max(0, Math.min(1, (run.phaseT - 0.45) / (GROW_T - 0.55))) : roots ? 0 : 1;
+    if (cam < soilTop + 6) {
+      for (const tree of run.trees) this.drawTree(g, tree, growP, cam);
+    }
+    if (run.phase === 'grow' && growP > 0 && growP < 1 && Math.random() < 0.5) {
+      for (const tree of run.trees) {
+        const S = treeShape(tree.growth * ease(growP), soilTop, tree.x);
+        const a = Math.random() * Math.PI * 2;
+        this.fx.push({ x: tree.x + Math.cos(a) * S.cr, y: S.cy + Math.sin(a) * S.cr * 0.8, vx: Math.cos(a) * 20, vy: Math.sin(a) * 20 - 6, life: 0.6, color: Math.random() < 0.5 ? LEAF[4] : '#D2F7A0' });
+      }
+    }
+
+    // Frutos
+    if (run.phase === 'fruit' || run.ended) for (const f of run.fruits) if (f.state !== 'caught' && vis(f.y)) this.drawFruit(g, f, cam, t);
+
+    // Zarzas: mata espinosa en la superficie y la cabeza que avanza
+    for (const b of run.brambles) {
+      if (vis(soilTop, 12)) {
+        const bx = Math.round(b.segs.length ? b.segs[0][0] : b.x);
+        const by = soilTop - cam;
+        g.fillStyle = '#3A1A2A';
+        disc(g, bx, by - 3, 3);
+        g.fillStyle = '#6A2440';
+        g.fillRect(bx - 2, by - 5, 1, 1);
+        g.fillRect(bx + 2, by - 4, 1, 1);
+        g.fillStyle = '#C93A64';
+        g.fillRect(bx - 1, by - 6, 1, 1);
+        g.fillRect(bx + 3, by - 3, 1, 1);
+      }
+      if (roots && vis(b.y)) {
+        const x = Math.round(b.x);
+        const y = Math.round(b.y - cam);
+        g.fillStyle = '#9E2A4E';
+        g.fillRect(x - 1, y - 1, 3, 3);
+        g.fillStyle = Math.floor(t * 6) % 2 ? '#FF6B81' : '#C93A64';
+        g.fillRect(x, y, 1, 1);
+      }
+    }
+
+    // Puntas de las raíces que crecen: brillo que parpadea
+    for (const r of run.tips) {
+      if (!vis(r.y)) continue;
+      const x = Math.round(r.x);
+      const y = Math.round(r.y - cam);
+      g.fillStyle = ROOT.live;
       g.fillRect(x - 1, y, 3, 1);
       g.fillRect(x, y - 1, 1, 3);
       g.fillStyle = '#FFFFFF';
       g.fillRect(x, y, 1, 1);
       if (Math.floor(t * 8 + x) % 2) {
-        g.fillStyle = this.hyphaCol[2];
+        g.fillStyle = ROOT.liveHi;
         g.fillRect(x - 2, y, 1, 1);
         g.fillRect(x + 2, y, 1, 1);
       }
     }
 
-    // Espora
-    if (vis(run.cy)) {
-      const core = bitmap(SPR.core, this.hyphaCol[0], '#FFF8E4');
-      g.drawImage(core, run.cx - 3, run.cy - 3 - cam);
-      const ring = 5 + (Math.floor(t * 3) % 3);
-      g.fillStyle = this.hyphaCol[0];
-      for (let k = 0; k < 12; k++) {
-        const a = (k / 12) * Math.PI * 2;
-        if (k % 2) g.fillRect(Math.round(run.cx + Math.cos(a) * ring), Math.round(run.cy - cam + Math.sin(a) * ring), 1, 1);
-      }
-    }
-
-    // Oscuridad de la cueva: solo se ve lo que tu red ha iluminado
-    if (run.dark) {
-      this.updateDark(cam);
-      g.imageSmoothingEnabled = true;
-      g.drawImage(this.darkC, 0, this.darkY, run.gw * CELL, this.darkRows * CELL);
-      g.imageSmoothingEnabled = false;
-      // pistas: los cristales destellan a oscuras; con Ecolocalización se ve su silueta
-      for (let k = k0 - 1; k <= k1 + 1; k++) {
-        for (const p of bucket(run, k).pockets) {
-          if ((p.type !== 'c' && p.type !== 'guano') || !vis(p.y)) continue;
-          if (run.lit.has(Math.floor(p.y / CELL) * run.gw + Math.floor(p.x / CELL))) continue;
-          const py = p.y - cam;
-          if (run.st.echo) {
-            g.fillStyle = p.type === 'c' ? '#5E4A8A' : '#5A5040';
-            for (let q = 0; q < 8; q++) {
-              const a = (q / 8) * Math.PI * 2 + t;
-              g.fillRect(Math.round(p.x + Math.cos(a) * 4), Math.round(py + Math.sin(a) * 4), 1, 1);
-            }
-          }
-          if (p.type === 'c' && Math.floor(t * 2 + p.x * 0.7) % 9 === 0) {
-            g.fillStyle = '#E5C8FF';
-            g.fillRect(p.x, py - 1, 1, 3);
-            g.fillRect(p.x - 1, py, 3, 1);
-          }
-        }
-      }
-    }
-
-    // Récord de profundidad: una línea discontinua (encima de la oscuridad)
+    // Récord de profundidad: una línea discontinua
     const recY = soilTop + this.record - cam;
-    const showRec = this.record > 20 && recY > 2 && recY < VH - 2;
+    const showRec = roots && this.record > 20 && recY > 2 && recY < VH - 2;
     if (showRec) {
       g.fillStyle = 'rgba(255,243,214,0.55)';
       for (let x = (Math.floor(t * 6) % 6); x < W; x += 6) g.fillRect(x, recY, 3, 1);
@@ -970,57 +969,60 @@ export class RunRenderer {
       if (a.kind !== 'fly') continue;
       a.x += Math.sin(t * 0.7 + a.ph) * 6 * dt;
       a.y += Math.cos(t * 0.9 + a.ph) * 3 * dt;
-      const y = Math.round(Math.max(1, Math.min(skyH - 3, a.y))) - cam;
-      if (y >= 0 && Math.sin(t * 2 + a.ph * 3) > 0.2) {
-        g.fillStyle = run.cave ? '#9F8CFF' : run.swamp ? '#C6F26B' : '#FFE27A';
+      const y = Math.round(Math.min(soilTop - 4, a.y)) - cam;
+      if (y >= 0 && y < VH && Math.sin(t * 2 + a.ph * 3) > 0.2) {
+        g.fillStyle = '#FFE27A';
         g.fillRect(Math.round(a.x), y, 1, 1);
       }
     }
 
-    // Reglilla de profundidad en el borde derecho: una marca cada 50 cm
-    g.fillStyle = 'rgba(255,243,214,0.35)';
-    for (let dd = Math.max(50, Math.ceil((cam - soilTop) / 50) * 50); soilTop + dd < cam + VH; dd += 50) {
-      g.fillRect(W - (dd % 100 ? 2 : 4), soilTop + dd - cam, dd % 100 ? 2 : 4, 1);
-    }
-
-    // Setas en la superficie al final (la cámara ya ha subido)
-    if (run.ended) this.endT += dt;
-    if (run.ended && run.setas.length && cam < skyH + 10) {
-      const capCol = run.cave ? '#C79BFF' : run.swamp ? '#C6F26B' : PAL.e;
-      const spotCol = run.cave ? '#F4E6FF' : run.swamp ? '#F0FFC0' : '#FFE0F0';
-      for (const s of run.setas) {
-        const p = Math.min(1, Math.max(0, (this.endT - s.d) / 0.25));
-        if (p <= 0) continue;
-        const h = Math.round(1 + 3 * p);
-        const sy = s.y - cam;
-        g.fillStyle = '#F4E9D8';
-        g.fillRect(s.x, sy - h + 1, 1, h);
-        g.fillStyle = capCol;
-        g.fillRect(s.x - 1, sy - h - 1, 3, 1);
-        g.fillRect(s.x - 2, sy - h, 5, 1);
-        g.fillStyle = spotCol;
-        g.fillRect(s.x - 1, sy - h, 1, 1);
-        if (p >= 1 && Math.random() < 0.01) this.fx.push({ x: s.x, y: s.y - h - 1, vx: (Math.random() - 0.5) * 6, vy: -8 - Math.random() * 8, life: 1.2, color: capCol });
-      }
-    }
-
-    // Puntero: anillo de alcance y cruz
+    // Puntero: con raíces, un brote y su alcance bajo tierra; en la cosecha, la cesta y su radio
     if (pointer && !run.ended) {
       const px = Math.round(pointer.x);
       const py = Math.round(pointer.y - cam);
-      if (px >= 0 && pointer.y >= soilTop - 4 && px < W && py < VH) {
-        const R = run.st.attract;
-        const n = Math.max(32, Math.round(R * 1.1));
-        g.fillStyle = 'rgba(255,243,214,0.5)';
-        for (let k = 0; k < n; k += 2) {
-          const a = t * 0.6 + (k / n) * Math.PI * 2;
-          g.fillRect(Math.round(px + Math.cos(a) * R), Math.round(py + Math.sin(a) * R), 1, 1);
+      if (px >= -4 && px < W + 4 && py >= -4 && py < VH + 4) {
+        const ring = (R, col, speed) => {
+          const n = Math.max(14, Math.round(R * 1.1));
+          g.fillStyle = col;
+          for (let k = 0; k < n; k += 2) {
+            const a = t * speed + (k / n) * Math.PI * 2;
+            g.fillRect(Math.round(px + Math.cos(a) * R), Math.round(py + Math.sin(a) * R), 1, 1);
+          }
+        };
+        if (roots) {
+          if (pointer.y >= soilTop - 4) ring(run.st.attract, 'rgba(255,243,214,0.45)', 0.6);
+          // brote: tallo, dos hojas y una luz en el punto exacto
+          g.fillStyle = PAL.ink;
+          g.fillRect(px - 3, py - 5, 7, 2);
+          g.fillRect(px - 1, py - 3, 3, 5);
+          g.fillStyle = '#5FA155';
+          g.fillRect(px, py - 3, 1, 3);
+          g.fillStyle = '#B6E35A';
+          g.fillRect(px - 2, py - 4, 2, 1);
+          g.fillRect(px + 1, py - 5, 2, 1);
+          g.fillStyle = '#FFF8E4';
+          g.fillRect(px, py, 1, 1);
+          g.fillStyle = ROOT.live;
+          g.fillRect(px - 1, py + 1, 3, 1);
+        } else {
+          ring(run.st.catchR, 'rgba(255,243,214,0.85)', 2);
+          // cesta de mimbre
+          const bx = px - 4;
+          const by = py - 1;
+          g.fillStyle = PAL.ink;
+          g.fillRect(bx - 1, by - 1, 11, 7);
+          g.fillStyle = BARK[2];
+          g.fillRect(bx, by, 9, 1);
+          g.fillRect(bx, by + 1, 1, 1);
+          g.fillRect(bx + 8, by + 1, 1, 1);
+          g.fillRect(bx, by + 2, 9, 1);
+          g.fillStyle = '#C98A52';
+          for (let q = 0; q < 9; q += 2) g.fillRect(bx + q, by + 3, 1, 1);
+          g.fillRect(bx + 1, by + 4, 7, 1);
+          g.fillStyle = BARK[1];
+          for (let q = 1; q < 9; q += 2) g.fillRect(bx + q, by + 3, 1, 1);
+          g.fillRect(bx + 1, by + 5, 7, 0);
         }
-        g.fillStyle = '#FFF8E4';
-        g.fillRect(px - 3, py, 2, 1);
-        g.fillRect(px + 2, py, 2, 1);
-        g.fillRect(px, py - 3, 1, 2);
-        g.fillRect(px, py + 2, 1, 2);
       }
     }
 
@@ -1076,13 +1078,6 @@ export class RunRenderer {
       ctx.globalAlpha = 1;
     };
 
-    // Metros en la reglilla y etiqueta del récord
-    for (let dd = Math.max(100, Math.ceil((cam - soilTop) / 100) * 100); soilTop + dd < cam + VH; dd += 100) {
-      const y = Math.round(this.oy + (soilTop + dd - cam) * s);
-      if (y > 70) text(`${dd / 100} m`, Math.round(this.ox + (W - 6) * s), y + 7, 20, 'rgba(255,243,214,0.6)', 'right');
-    }
-    if (showRec) text('récord', Math.round(this.ox + 6 * s), Math.round(this.oy + recY * s) - 6, 20, 'rgba(255,243,214,0.75)', 'left');
-
     // Textos flotantes con la fuente pixel
     for (const f of this.floaters) {
       f.life -= dt;
@@ -1091,12 +1086,12 @@ export class RunRenderer {
     }
     this.floaters = this.floaters.filter((f) => f.life > 0);
 
-    // Cartel de capa nueva
+    // Cartel
     if (this.banner) {
       const b = this.banner;
       b.life -= dt;
       const a = Math.max(0, Math.min(1, b.life * 1.5, (2.4 - b.life) * 4));
-      const y = Math.round(this.ch * 0.3);
+      const y = Math.round(this.ch * 0.32);
       const k = Math.min(1, this.cw / 560); // en pantallas estrechas, más pequeño
       text(b.title, Math.round(this.cw / 2), y, Math.round(46 * Math.max(0.7, k)), '#FFF3D6', 'center', a);
       if (b.sub) text(b.sub, Math.round(this.cw / 2), y + Math.round(32 * Math.max(0.7, k)), Math.round(26 * Math.max(0.8, k)), '#F4D58D', 'center', a);

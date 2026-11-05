@@ -61,3 +61,9 @@ export function fmtDepth(px) {
   const m = Math.max(0, px) / 100;
   return `${m < 100 ? (Math.floor(m * 10) / 10).toFixed(1).replace('.', ',') : Math.floor(m)} m`;
 }
+
+/** Largo en px del mundo → "40 cm" o "1,2 m". */
+export function fmtLen(px) {
+  const cm = Math.round(Math.max(0, px));
+  return cm < 100 ? `${cm} cm` : fmtDepth(cm);
+}

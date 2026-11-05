@@ -102,14 +102,36 @@ export class TreeView {
   }
 
   center() {
+    this.fitKey = null;
+    if (this.state) this.fit(this.state);
+    else { this.pan = { x: 0, y: 0 }; this.layout(); }
+  }
+
+  /** Encaja lo que se ve del árbol en la pantalla (al abrirse ramas nuevas, se recoloca). */
+  fit(s) {
+    let x0 = Infinity; let x1 = -Infinity; let y0 = Infinity; let y1 = -Infinity;
+    for (const { n, b } of this.items.values()) {
+      if (b.hidden) continue;
+      x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y);
+    }
+    if (x0 === Infinity) return;
+    const key = `${x0}|${x1}|${y0}|${y1}`;
+    if (key === this.fitKey) return;
+    this.fitKey = key;
+    const r = this.root.getBoundingClientRect();
+    this.mid = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+    const fw = (r.width - 40) / ((x1 - x0 + 1.2) * UNIT);
+    const fh = (r.height - 190) / ((y1 - y0 + 1.2) * UNIT);
+    this.zoom = Math.max(0.5, Math.min(1, fw, fh));
     this.pan = { x: 0, y: 0 };
     this.layout();
   }
 
   layout() {
     const r = this.root.getBoundingClientRect();
-    const cx = r.width / 2 + this.pan.x;
-    const cy = r.height * 0.52 + this.pan.y;
+    const m = this.mid || { x: 0, y: 0 };
+    const cx = r.width / 2 + this.pan.x - m.x * UNIT * this.zoom;
+    const cy = r.height * 0.46 + this.pan.y - m.y * UNIT * this.zoom;
     this.plane.style.transform = `translate(${Math.round(cx)}px, ${Math.round(cy)}px) scale(${this.zoom})`;
   }
 
@@ -126,9 +148,9 @@ export class TreeView {
         b.className = `node s-${st}${l ? ' own' : ''}${teaser ? ' teaser' : ''}`;
         b.hidden = st === 'hidden' && !teaser;
         const color = BRANCHES[n.branch].color;
-        if (teaser) it.img.src = iconURL('espora', PAL.line, PAL.line);
+        if (teaser) it.img.src = iconURL('semilla', PAL.line, PAL.line);
         else if (st === 'max') it.img.src = iconURL(NODE_ICON[n.id], PAL.ink, PAL.panel2);
-        else it.img.src = iconURL(NODE_ICON[n.id], color, PAL.hyphaHi);
+        else it.img.src = iconURL(NODE_ICON[n.id], color, PAL.creamHi);
         it.lv.textContent = teaser || n.max === 1 ? '' : `${l}/${n.max}`;
         b.tabIndex = b.hidden || teaser ? -1 : 0;
       }
@@ -140,6 +162,7 @@ export class TreeView {
       }
     }
     this.state = s;
+    this.fit(s);
     this.renderCard();
   }
 
@@ -172,7 +195,7 @@ export class TreeView {
     this.card.hidden = false;
     this.card.style.setProperty('--c', br.color);
     this.card.innerHTML = `
-      <div class="nc-head"><img alt="" src="${iconURL(NODE_ICON[n.id], br.color, PAL.hyphaHi)}"><div><div class="nc-branch"></div><h3></h3></div></div>
+      <div class="nc-head"><img alt="" src="${iconURL(NODE_ICON[n.id], br.color, PAL.creamHi)}"><div><div class="nc-branch"></div><h3></h3></div></div>
       <p class="nc-desc"></p>
       <div class="nc-rows">
         ${n.max > 1 ? `<div><span>Nivel</span><b>${l} / ${n.max}</b></div>` : ''}
